@@ -1,0 +1,132 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Oct  2 12:04:10 2025
+
+@author: Estudiante
+"""
+
+# %%
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import numpy as np
+def agrupa_otros(df, variable_a_graficar, umbral=0.05):
+    """Agrupa en 'Otros' los países cuyo valor es menor a cierto porcentaje del total"""
+    df["otrosName"] = df["Name"]
+    total = df[variable_a_graficar].sum()
+    df.loc[df[variable_a_graficar] / total < umbral, "otrosName"] = "Otros"
+    df = df.groupby("otrosName")[[variable_a_graficar]].sum().reset_index()
+    return df
+
+
+# %% 1: Abrir dataset
+
+df = pd.read_csv("/home/Estudiante/renata/co2_emissions.csv")
+
+# %%### 2: Corte transversal para 2022
+df_2022 = df[df['year'] == 2022].copy()
+
+# %%### 3:
+# Sintaxis general con pandas: df.plot(x="columna_x", y="columna_y", kind="tipo_de_grafico")
+# (obviamente, ciertos graficos necesitan otros parametros)
+
+df_2022.plot(x="gdp", y="co2", kind="bar")
+
+# %%  Repetir pasando ejes a log
+# ponerlo lindo (https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.plot.html)
+
+ax= df_2022.plot(x="gdp", xlabel="GDP", y="co2", ylabel="CO2", kind="bar",logy=True)
+ax.set_xticklabels([])
+plt.show()
+# %%#### 4: idem para poblacion
+
+# %%#### 5
+df_oil = agrupa_otros(
+    df_2022, "oil_co2", umbral=0.03
+).copy()  # el nombre agrupado queda en "otrosName"
+# %%#### 6
+# Gráfico de torta:
+df_oil.plot(kind="pie", y="oil_co2", labels=df_oil["otrosName"], legend=False)
+# ¿que otro tipo de gráfico se les ocurre para ver lo mismo?
+# %% 7: elegir uno y repetir para coal y gas
+df_coal=agrupa_otros(df_2022, "coal_co2",umbral=0.03)
+
+df_coal.plot(kind="bar",y="coal_co2", x="otrosName",xlabel="Paises", ylabel="Toneladas de CO2 emitidas por carbón", legend=False)
+# %%## 8: Pasamos a corte longitudinal, para Argentina (hacer copia)
+df_arg = df[df['Name']=="Argentina"].copy()
+
+# emisiones de CO2 de argentina a lo largo del tiempo
+
+# %%## 9: Generamos columnas per capita
+for col in ["co2", "oil_co2", "coal_co2", "gas_co2", "gdp"]:
+    df_arg[col + "_per_capita"] = df_arg[col] / df_arg["population"]
+
+# %%## 10: Graficos de linea juntos
+df_arg.plot(
+    x="year",
+    y=["oil_co2_per_capita", "coal_co2_per_capita", "gas_co2_per_capita"],
+    kind="line",
+    title="Argentina: CO2 emissions per capita (tons per person)",
+)  # los graficos de linea se pueden hacer con varias columnas a la vez
+
+# %%## 11: Calculo porcentajes de emision por tipo de combustible
+df_arg["coal_percent"] = df_arg["coal_co2"] / df_arg["co2"]
+df_arg["oil_percent"] = df_arg["oil_co2"] / df_arg["co2"]
+df_arg["gas_percent"] = df_arg["gas_co2"] / df_arg["co2"]
+df_arg["other_percent"] = 1 - (
+    df_arg["coal_percent"] + df_arg["oil_percent"] + df_arg["gas_percent"]
+)
+
+# %%## a:
+df_arg.plot(
+    x="year",
+    y=["coal_percent", "oil_percent", "gas_percent", "other_percent"],
+    kind="bar",
+    title="Argentina: CO2 emissions percent by fuel type",
+    stacked=True,
+)
+# Repetir como gráfico de lineas
+df_arg.plot(
+    x="year",
+    y=["coal_percent", "oil_percent", "gas_percent", "other_percent"],
+    kind="line",
+    title="Argentina: CO2 emissions percent by fuel type",
+    stacked=True,
+)
+
+# %%##
+# Hacer un gráfico que muestre si hay correlación entre el gdp per capita y las emisiones de cada tipo per capita
+# voy a hacer un grafico areas segun consumo y linea conductora que indica GDP
+
+import matplotlib.pyplot as plt
+
+cols = ["coal_percent", "oil_percent", "gas_percent", "other_percent"]
+
+fig, ax1 = plt.subplots(figsize=(15, 6))
+cmap = mpl.colormaps['plasma']
+n_lines = 4
+# Área apilada de porcentajes de emisiones
+ax1.stackplot(
+    df_arg["year"],
+    df_arg["coal_percent"],
+    df_arg["oil_percent"],
+    df_arg["gas_percent"],
+    df_arg["other_percent"],
+    labels=["Carbón", "Petróleo", "Gas", "Otros"],    
+    colors = cmap(np.linspace(0, 1.3, n_lines)),
+    alpha=0.7,
+)
+ax1.set_ylabel("Porcentaje de emisiones de CO₂")
+ax1.set_xlabel("Año")
+ax1.set_title("Argentina: Composición de emisiones de CO₂ vs. crecimiento económico")
+ax1.legend(loc="upper left")
+
+# Eje secundario para GDP
+ax2 = ax1.twinx()
+ax2.plot(df_arg["year"], df_arg["gdp"], color="black", linewidth=3, label="GDP")
+ax2.set_ylabel("PBI")
+
+plt.tight_layout()
+plt.show()
